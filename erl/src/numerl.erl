@@ -1,7 +1,39 @@
+%
+% Author: Manu Datta (manu.datta@gmail.com)
+%
 -module(numerl).
 -include_lib("eunit/include/eunit.hrl").
 -include("numerl.hrl").
 -compile(export_all).
+%
+% determinant code
+%
+remove_nth_row(N,Mat)->
+  {A,[_Head|Rest]} = lists:split(N,Mat)
+  , lists:append(A,Rest).
+remove_nth_col(N,Mat)->
+   F = fun(X,{NN,Acc}) ->
+    {A,[_Head|Rest]} = lists:split(NN,X)
+    ,{N,[lists:append(A,Rest)|Acc]}
+    end
+  ,{_,Val}=lists:foldl(F,{N,[]},lists:reverse(Mat))
+  ,Val.
+minor(I,J,Mat)->
+  remove_nth_col(J,remove_nth_row(I,Mat)).
+det([[Elem]])->
+  Elem;
+det(Mat=[Row|_Rows])->
+  F = fun({Val,Minor},{Pos,Acc}) ->
+        _Next={_NewPos,_NewAcc}=case Pos of
+          even -> {odd,Val*det(Minor)+Acc};
+          odd -> {even,-1*Val*det(Minor)+Acc}
+        end
+       end
+  ,ColNum = length(Row)
+  ,Minors = [minor(0,J-1,Mat) || J <- lists:seq(1,ColNum)]
+  ,{_,Val} = lists:foldl(F,{even,0},lists:zip(Row,Minors))
+  ,Val.
+  
 % matrix multiplication on process ring
 print_array_matrix(Matrix)->
   [io:format("~w~n",[array:to_list(X)]) || X <- array:to_list(Matrix)]. 
@@ -75,7 +107,8 @@ matrix_multiply(A,B)->
       {error,timeout}
   end.
 
-%%%%%
+% some helper functions
+
 rand_mat(M,N)->
   random:seed(now()) 
   ,[ lists:foldl( fun(_,A) -> [random:uniform()|A] end , [] , lists:seq(1,N)) || _X <- lists:seq(1,M)].
