@@ -1,4 +1,5 @@
 -module(numerl).
+-include_lib("eunit/include/eunit.hrl").
 -include("numerl.hrl").
 -compile(export_all).
 % matrix multiplication on process ring
@@ -9,6 +10,7 @@ gather_mat_multiply(Parent,Result,_WorkerCount=0)->
   Parent!{done,Result};
 gather_mat_multiply(Parent,Result,WorkerCount)->
   receive 
+    {'EXIT',From,Reason} -> exit({worker_error,From,Reason});
     {I,J,Val} = _Msg -> 
       _Result = array:set(I-1,array:set(J-1,Val,array:get(I-1,Result)),Result)
       %, io:format("Gathering -> ~p~n",[_Msg])
@@ -31,7 +33,9 @@ loop_matrix_multiply(_State=#mat_mult_state{next_proc=NextProc,row_num=RowNum,ro
       ,loop_matrix_multiply(_State#mat_mult_state{col_count=ColCount-1});
     {set_next_proc,Next} when is_pid(Next) ->
       %io:format("~p got ~p~n",[self(),Next]) ,
-      loop_matrix_multiply(_State#mat_mult_state{next_proc=Next})
+      link(Next)
+      ,link(AccRef)
+      ,loop_matrix_multiply(_State#mat_mult_state{next_proc=Next})
   end.
 
 
@@ -47,20 +51,27 @@ send_cols([Col|ColData],ColNum,Workers,OrigWorkers) ->
 
 make_matrix(L)->
   array:from_list( [ array:from_list(X) || X <- L] ).
+make_row_major(A)->
+  [array:to_list(X) || X <- array:to_list(A)].
 matrix_multiply(A,B)->
   Arr = make_matrix(zeros(length(A),length(lists:nth(1,B)))) 
   ,T=transpose(B)
   ,ColCount= length(T) 
   ,RowCount= length(A) 
   ,AccRef = spawn(?MODULE,gather_mat_multiply,[self(),Arr,RowCount])
+  ,link(AccRef)
   ,WorkerState=[#mat_mult_state{row_data=RowData,row_num=RowNum,acc_ref=AccRef,col_count=ColCount} || {RowNum,RowData} <- lists:zip(lists:seq(1,RowCount),A)]
-  ,[Head|Rest] = Workers = [ spawn(?MODULE,loop_matrix_multiply,[State]) || State <- WorkerState ] 
-  ,lists:foldl(fun(Proc,LastProc) -> LastProc ! {set_next_proc,Proc},Proc end,Head,Rest)
-  ,lists:last(Rest) ! {set_next_proc,Head}
+  ,[Head|Rest] = Workers = [ spawn(?MODULE,loop_matrix_multiply,[State]) || State <- WorkerState ]
+  ,case Rest of
+    [] -> Head ! {set_next_proc,Head};
+    _ -> lists:last(Rest) ! {set_next_proc,Head}
+        ,lists:foldl(fun(Proc,LastProc) -> LastProc ! {set_next_proc,Proc},Proc end,Head,Rest)
+  end
   ,send_cols(T,1,Workers,Workers)
   , receive 
-      {done,Result} -> Result
-    after 10000 ->
+      {done,Result} -> make_row_major(Result);
+      {'EXIT',From,Reason} -> {error,worker,From,Reason}
+    after 600000 ->
       {error,timeout}
   end.
 
