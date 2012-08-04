@@ -1,10 +1,37 @@
 %
 % Author: Manu Datta (manu.datta@gmail.com)
+% Please send any bug report to manu.datta@gmail.com
 %
 -module(numerl).
 -include_lib("eunit/include/eunit.hrl").
 -include("numerl.hrl").
 -compile(export_all).
+% inverse code
+inv(Mat)->
+  Det = det(Mat)
+  , F = fun(L) -> [ X/Det || X <- L ] end
+  ,case Det of 
+    0 -> {error,non_singular};
+    _ -> lists:foldl(fun(L,Acc) -> [F(L)|Acc] end , [],lists:reverse(adjoint(Mat))) 
+   end.
+
+adjoint(Mat)->
+  transpose(cofactors(Mat)).
+
+% cofactors
+cofactors([H|_]=Mat)->
+  Rows = length(Mat)
+  ,Cols = length(H)
+  ,F = fun ({I,J}) -> Val = det( minor(I-1,J-1,Mat) )
+    ,case (I+J-2) rem 2 of 
+      0 -> Val ;
+      1 -> -1*Val
+     end
+  end
+  ,M = fun(L,Acc) -> [lists:map(F,L)|Acc] end
+  ,V=lists:foldl(M,[], [[{I,J}||J<-lists:seq(1,Cols)]|| I <- lists:seq(1,Rows)])
+  ,lists:reverse(V).
+
 %
 % determinant code
 %
@@ -37,7 +64,7 @@ det(Mat=[Row|_Rows])->
 % matrix multiplication on process ring
 print_array_matrix(Matrix)->
   [io:format("~w~n",[array:to_list(X)]) || X <- array:to_list(Matrix)]. 
-% gather all the 
+% gather all the values from process rings 
 gather_mat_multiply(Parent,Result,_WorkerCount=0)->
   Parent!{done,Result};
 gather_mat_multiply(Parent,Result,WorkerCount)->
