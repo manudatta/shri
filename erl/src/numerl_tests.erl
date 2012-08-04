@@ -1,0 +1,19 @@
+-module(numerl_tests).
+-include_lib("eunit/include/eunit.hrl").
+mat1()->
+ [[3,2,8,1],[1,-4,0,3]].
+mat2()-> 
+  [[2,-1],[1,-3],[0,1],[3,1]].
+mat3()->
+  [[1,2,0],[0,3,1],[0,1,2]].
+mat4()->
+  [[1,2,3],[-2,-4,-5],[3,5,6]].
+mat5()->
+  [[1,3,2],[-3,-3,-1],[2,1,0]].
+det1_test()->
+  ?assertEqual(1,numerl:det(mat4())).
+det2_test()->
+  ?assertEqual(1,numerl:det([[1]])).
+inv1_test()->
+  ?assertEqual(mat5(),numerl:inv(mat4())).
+
