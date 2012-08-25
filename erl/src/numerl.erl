@@ -6,7 +6,24 @@
 -include_lib("eunit/include/eunit.hrl").
 -include("numerl.hrl").
 -compile(export_all).
-% inverse code
+%
+% horner's method -> input in form of [{Coff,N}]
+%
+horner([],_N,_X,Acc)->
+  Acc;
+horner([{Coff0,N=0}],N,X,Acc)->
+  Acc*X+Coff0;
+horner([{CoffN,N}|Rest],N,X,Acc)->
+  horner(Rest,N-1,X,Acc*X+CoffN);
+horner(P=[{_CoffN,_N}|_],M,X,Acc)->
+  horner(P,M-1,X,Acc*X).
+horner(Poly,X)->
+  _Sorted=[{CoffN,MaxN}|Rest]=lists:sort( fun({_,N},{_,M}) -> M < N end , Poly)
+  ,horner(Rest,MaxN-1,X, _Acc = CoffN ).
+  
+%
+% inverse of a row major matrix 
+%
 inv(Mat)->
   Det = det(Mat)
   , F = fun(L) -> [ X/Det || X <- L ] end
@@ -14,10 +31,11 @@ inv(Mat)->
     0 -> {error,non_singular};
     _ -> lists:foldl(fun(L,Acc) -> [F(L)|Acc] end , [],lists:reverse(adjoint(Mat))) 
    end.
-
+%
+% adjoint of a matrix
+%
 adjoint(Mat)->
   transpose(cofactors(Mat)).
-
 % cofactors
 cofactors([H|_]=Mat)->
   Rows = length(Mat)
@@ -31,9 +49,8 @@ cofactors([H|_]=Mat)->
   ,M = fun(L,Acc) -> [lists:map(F,L)|Acc] end
   ,V=lists:foldl(M,[], [[{I,J}||J<-lists:seq(1,Cols)]|| I <- lists:seq(1,Rows)])
   ,lists:reverse(V).
-
 %
-% determinant code
+% determinant of a matrix 
 %
 remove_nth_row(N,Mat)->
   {A,[_Head|Rest]} = lists:split(N,Mat)
@@ -167,6 +184,13 @@ det(Mat=[Row|_Rows])->
   ,Minors = [minor(0,J-1,Mat) || J <- lists:seq(1,ColNum)]
   ,{_,Val} = lists:foldl(F,{even,0},lists:zip(Row,Minors))
   ,Val.
+%
+% row major set (1 indexed) (1,1) -> points to first element 
+%
+row_major_set(Row,Col,Val,Array)->
+  {Rows,[TopRow|Rest]} = lists:split(Row-1,Array)
+  ,{Before,[_|After]} = lists:split(Col-1,TopRow)
+  ,Rows++[Before++[Val|After]]++Rest.
   
 % matrix multiplication on process ring
 print_array_matrix(Matrix)->
@@ -178,7 +202,7 @@ gather_mat_multiply(Parent,Result,WorkerCount)->
   receive 
     {'EXIT',From,Reason} -> exit({worker_error,From,Reason});
     {I,J,Val} = _Msg -> 
-      _Result = array:set(I-1,array:set(J-1,Val,array:get(I-1,Result)),Result)
+      _Result = row_major_set(I,J,Val,Result)
       %, io:format("Gathering -> ~p~n",[_Msg])
       ,gather_mat_multiply(Parent,_Result,WorkerCount);
     done ->
@@ -220,11 +244,10 @@ make_matrix(L)->
 make_row_major(A)->
   [array:to_list(X) || X <- array:to_list(A)].
 matrix_multiply(A,B)->
-  Arr = make_matrix(zeros(length(A),length(lists:nth(1,B)))) 
-  ,T=transpose(B)
+  T=transpose(B)
   ,ColCount= length(T) 
   ,RowCount= length(A) 
-  ,AccRef = spawn(?MODULE,gather_mat_multiply,[self(),Arr,RowCount])
+  ,AccRef = spawn(?MODULE,gather_mat_multiply,[self(),A,RowCount])
   ,link(AccRef)
   ,WorkerState=[#mat_mult_state{row_data=RowData,row_num=RowNum,acc_ref=AccRef,col_count=ColCount} || {RowNum,RowData} <- lists:zip(lists:seq(1,RowCount),A)]
   ,[Head|Rest] = Workers = [ spawn(?MODULE,loop_matrix_multiply,[State]) || State <- WorkerState ]
@@ -235,7 +258,7 @@ matrix_multiply(A,B)->
   end
   ,send_cols(T,1,Workers,Workers)
   , receive 
-      {done,Result} -> make_row_major(Result);
+      {done,Result} -> Result;
       {'EXIT',From,Reason} -> {error,worker,From,Reason}
     after 600000 ->
       {error,timeout}
