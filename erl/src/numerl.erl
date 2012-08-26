@@ -20,7 +20,33 @@ horner(P=[{_CoffN,_N}|_],M,X,Acc)->
 horner(Poly,X)->
   _Sorted=[{CoffN,MaxN}|Rest]=lists:sort( fun({_,N},{_,M}) -> M < N end , Poly)
   ,horner(Rest,MaxN-1,X, _Acc = CoffN ).
-  
+%
+% Algebric equation solver 
+%
+solve(Fun,Bounds={XMin,XMax},Scheme=halfing,Eps,Calls)
+  when Calls < 10000000 ->
+  Avg = (XMin+XMax)/2
+  ,Favg = Fun(Avg)
+  , case abs(Favg-0) > Eps of
+      true -> NewBounds = case Favg > 0 of 
+        true -> {XMin,Avg};
+        false -> {Avg,XMax}
+        end
+       ,solve(Fun,NewBounds,Scheme,Eps,Calls+1);
+      false -> Avg
+   end;
+solve(Fun,Bounds={XMin,XMax},Scheme=halfing,Eps,Calls) ->
+  {error,max_call_count_exceed}.
+solve(Fun,Bounds={XMin,XMax},Scheme=halfing,Eps)->
+  solve(Fun,Bounds={XMin,XMax},Scheme=halfing,Eps,0).
+solve(Fun,Bounds={XMin,XMax},Eps)->
+  Scheme = halfing
+  ,solve(Fun,Bounds,Scheme,Eps).
+solve(Fun,Bounds={XMin,XMax})->
+  Scheme = halfing
+  ,Eps = 0.0000001
+  ,solve(Fun,Bounds,Scheme,Eps).
+
 %
 % inverse of a row major matrix 
 %
