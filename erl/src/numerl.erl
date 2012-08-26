@@ -23,11 +23,43 @@ horner(Poly,X)->
 %
 % Algebric equation solver 
 %
+
+%
+% method of chords first call uses halfing
+%
+solve(Fun,Bounds={XMin,XMax},Scheme=chords,Eps,Calls=0) ->
+  Avg = Avg=(XMin+XMax)/2
+  ,FAvg = Fun(Avg)
+  ,case abs(FAvg) > Eps of
+      true -> NewBounds = case FAvg > 0 of 
+        true -> {XMin,Avg};
+        false -> {Avg,XMax}
+        end
+       ,solve(Fun,NewBounds,Scheme,Eps,Calls+1);
+    false -> Avg
+  end;
+solve(Fun,Bounds={XMin,XMax},Scheme=chords,Eps,Calls)
+  when Calls < 1000 ->
+  FXMin = Fun(XMin)
+  ,FXMax = Fun(XMax)
+  ,D = XMin - (XMax-XMin)*FXMin/(FXMax-FXMin)
+  ,FD = Fun(D)
+  ,case abs(FD) > Eps of
+    true ->
+      case FD > 0.0 of
+        true -> solve(Fun,_NewBounds={XMin,D},Scheme=chords,Eps,Calls);
+        false -> solve(Fun,_NewBounds={D,XMax},Scheme=chords,Eps,Calls)
+      end;
+    false -> D 
+  end;
+%
+% method of halfing
+%
 solve(Fun,Bounds={XMin,XMax},Scheme=halfing,Eps,Calls)
-  when Calls < 10000000 ->
+  when Calls < 1000 ->
   Avg = (XMin+XMax)/2
   ,Favg = Fun(Avg)
-  , case abs(Favg-0) > Eps of
+  , case abs(Favg) > Eps of
       true -> NewBounds = case Favg > 0 of 
         true -> {XMin,Avg};
         false -> {Avg,XMax}
@@ -35,10 +67,10 @@ solve(Fun,Bounds={XMin,XMax},Scheme=halfing,Eps,Calls)
        ,solve(Fun,NewBounds,Scheme,Eps,Calls+1);
       false -> Avg
    end;
-solve(Fun,Bounds={XMin,XMax},Scheme=halfing,Eps,Calls) ->
+solve(_Fun,_Bounds={_XMin,_XMax},_Scheme,_Eps,_Calls) ->
   {error,max_call_count_exceed}.
-solve(Fun,Bounds={XMin,XMax},Scheme=halfing,Eps)->
-  solve(Fun,Bounds={XMin,XMax},Scheme=halfing,Eps,0).
+solve(Fun,Bounds={XMin,XMax},Scheme,Eps)->
+  solve(Fun,Bounds={XMin,XMax},Scheme,Eps,0).
 solve(Fun,Bounds={XMin,XMax},Eps)->
   Scheme = halfing
   ,solve(Fun,Bounds,Scheme,Eps).
