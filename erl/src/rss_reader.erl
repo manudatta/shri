@@ -1,7 +1,7 @@
 -module(rss_reader).
 -include("../data/logging.hrl").
 -compile(export_all).
--define(RETRIEVE_INTERVAL,180000).
+-define(RETRIEVE_INTERVAL,1800060).
 start(Url,QPid)->
   inets:start()
   ,spawn(?MODULE,server,[Url,QPid]).
@@ -17,7 +17,7 @@ server(Url,QPid)->
             after ?RETRIEVE_INTERVAL -> 
               server(Url,QPid)
             end;
-        _ -> {error,not_rss2_feed}
+        _ -> erlang:exit(not_rss2_feed)
         end ; 
-    _ -> {error,Code}
+    _ -> erlang:exit(Code)
    end.
